@@ -1,6 +1,7 @@
 # LLCC68 driver
 
 This package proposes an implementation in C of the driver for **LLCC68** radio component.
+Please see the [changelog](CHANGELOG.md) for more information.
 
 ## Structure
 
