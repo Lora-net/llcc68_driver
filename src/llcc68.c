@@ -741,6 +741,14 @@ llcc68_status_t llcc68_set_lora_pkt_params( const void* context, const llcc68_pk
     return status;
 }
 
+llcc68_status_t llcc68_set_gfsk_pkt_address( const void* context, const uint8_t node_address,
+                                             const uint8_t broadcast_address )
+{
+    const uint8_t addresses[2] = { node_address, broadcast_address };
+
+    return llcc68_write_register( context, LLCC68_REG_GFSK_NODE_ADDRESS, addresses, 2 );
+}
+
 llcc68_status_t llcc68_set_cad_params( const void* context, const llcc68_cad_params_t* params )
 {
     const uint8_t buf[LLCC68_SIZE_SET_CAD_PARAMS] = {
@@ -1239,6 +1247,11 @@ uint32_t llcc68_convert_freq_in_hz_to_pll_step( uint32_t freq_in_hz )
 uint32_t llcc68_convert_timeout_in_ms_to_rtc_step( uint32_t timeout_in_ms )
 {
     return ( uint32_t )( timeout_in_ms * ( LLCC68_RTC_FREQ_IN_HZ / 1000 ) );
+}
+
+llcc68_status_t llcc68_handle_rx_done( const void* context )
+{
+    return llcc68_stop_rtc( context );
 }
 
 //

@@ -90,6 +90,11 @@ extern "C" {
 #define LLCC68_OCP_PARAM_VALUE_140_MA 0x38
 
 /**
+ * @brief XTA and XTB trimming capacitor default value after the chip entered @ref LLCC68_STANDBY_CFG_XOSC mode
+ */
+#define LLCC68_XTAL_TRIMMING_CAPACITOR_DEFAULT_VALUE_STDBY_XOSC 0x12
+
+/**
  * @brief  Maximum value for parameter nb_of_symbs in @ref llcc68_set_lora_symb_nb_timeout
  */
 #define LLCC68_MAX_LORA_SYMB_NUM_TIMEOUT 248
@@ -713,6 +718,8 @@ llcc68_status_t llcc68_set_tx_with_timeout_in_rtc_step( const void* context, con
  * | ----------------------| --------------------------------------------------------------------------------------|
  * | LLCC68_RX_SINGLE_MODE | Single: the chip stays in RX mode until a reception occurs, then switch to standby RC |
  *
+ * @remark Refer to @ref llcc68_handle_rx_done
+ *
  * @param [in] context Chip implementation context
  * @param [in] timeout_in_ms The timeout configuration in millisecond for Rx operation
  *
@@ -740,6 +747,8 @@ llcc68_status_t llcc68_set_rx( const void* context, const uint32_t timeout_in_ms
  * | ----------------------| --------------------------------------------------------------------------------------|
  * | LLCC68_RX_SINGLE_MODE | Single: the chip stays in RX mode until a reception occurs, then switch to standby RC |
  * | LLCC68_RX_CONTINUOUS  | Continuous: the chip stays in RX mode even after reception of a packet                |
+ *
+ * @remark Refer to @ref llcc68_handle_rx_done
  *
  * @param [in] context Chip implementation context
  * @param [in] timeout_in_rtc_step The timeout configuration for Rx operation
@@ -1174,6 +1183,20 @@ llcc68_status_t llcc68_set_gfsk_pkt_params( const void* context, const llcc68_pk
  */
 llcc68_status_t llcc68_set_lora_pkt_params( const void* context, const llcc68_pkt_params_lora_t* params );
 
+/*!
+ * @brief Set the Node and Broadcast address used for GFSK
+ *
+ * This setting is used only when filtering is enabled.
+ *
+ * @param [in] context Chip implementation context
+ * @param [in] node_address The node address used as filter
+ * @param [in] broadcast_address The broadcast address used as filter
+ *
+ * @returns Operation status
+ */
+llcc68_status_t llcc68_set_gfsk_pkt_address( const void* context, const uint8_t node_address,
+                                             const uint8_t broadcast_address );
+
 /**
  * @brief Set the parameters for CAD operation
  *
@@ -1447,6 +1470,18 @@ uint32_t llcc68_convert_freq_in_hz_to_pll_step( uint32_t freq_in_hz );
  * @returns Number of RTC steps
  */
 uint32_t llcc68_convert_timeout_in_ms_to_rtc_step( uint32_t timeout_in_ms );
+
+/**
+ * @brief Generic finalizing function after reception
+ *
+ * @remark This function can be called after any reception sequence and must be called after any reception with timeout
+ * active sequence.
+ *
+ * @param [in] context Chip implementation context
+ *
+ * @returns Operation status
+ */
+llcc68_status_t llcc68_handle_rx_done( const void* context );
 
 //
 // Registers access
