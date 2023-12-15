@@ -36,8 +36,7 @@
  * -----------------------------------------------------------------------------
  * --- DEPENDENCIES ------------------------------------------------------------
  */
-
-#include <string.h>  // memcpy
+#include <stddef.h>
 #include "llcc68.h"
 #include "llcc68_hal.h"
 #include "llcc68_regs.h"
@@ -173,8 +172,10 @@ typedef enum llcc68_commands_size_e
     LLCC68_SIZE_GET_PKT_TYPE               = 2,
     LLCC68_SIZE_SET_TX_PARAMS              = 3,
     LLCC68_SIZE_SET_MODULATION_PARAMS_GFSK = 9,
+    LLCC68_SIZE_SET_MODULATION_PARAMS_BPSK = 5,
     LLCC68_SIZE_SET_MODULATION_PARAMS_LORA = 5,
     LLCC68_SIZE_SET_PKT_PARAMS_GFSK        = 10,
+    LLCC68_SIZE_SET_PKT_PARAMS_BPSK        = 2,
     LLCC68_SIZE_SET_PKT_PARAMS_LORA        = 7,
     LLCC68_SIZE_SET_CAD_PARAMS             = 8,
     LLCC68_SIZE_SET_BUFFER_BASE_ADDRESS    = 3,
@@ -516,11 +517,10 @@ llcc68_status_t llcc68_get_irq_status( const void* context, llcc68_irq_mask_t* i
         LLCC68_GET_IRQ_STATUS,
         LLCC68_NOP,
     };
-    uint8_t         irq_local[sizeof( llcc68_irq_mask_t )] = { 0x00 };
-    llcc68_status_t status                                 = LLCC68_STATUS_ERROR;
+    uint8_t irq_local[sizeof( llcc68_irq_mask_t )] = { 0x00 };
 
-    status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_IRQ_STATUS, irq_local,
-                                                  sizeof( llcc68_irq_mask_t ) );
+    const llcc68_status_t status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_IRQ_STATUS,
+                                                                        irq_local, sizeof( llcc68_irq_mask_t ) );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -633,16 +633,16 @@ llcc68_status_t llcc68_set_tx_params( const void* context, const int8_t pwr_in_d
 
 llcc68_status_t llcc68_set_gfsk_mod_params( const void* context, const llcc68_mod_params_gfsk_t* params )
 {
-    llcc68_status_t status  = LLCC68_STATUS_ERROR;
-    const uint32_t  bitrate = ( uint32_t )( 32 * LLCC68_XTAL_FREQ / params->br_in_bps );
-    const uint32_t  fdev    = llcc68_convert_freq_in_hz_to_pll_step( params->fdev_in_hz );
-    const uint8_t   buf[LLCC68_SIZE_SET_MODULATION_PARAMS_GFSK] = {
+    const uint32_t bitrate = ( uint32_t )( 32 * LLCC68_XTAL_FREQ / params->br_in_bps );
+    const uint32_t fdev    = llcc68_convert_freq_in_hz_to_pll_step( params->fdev_in_hz );
+    const uint8_t  buf[LLCC68_SIZE_SET_MODULATION_PARAMS_GFSK] = {
         LLCC68_SET_MODULATION_PARAMS, ( uint8_t )( bitrate >> 16 ),       ( uint8_t )( bitrate >> 8 ),
         ( uint8_t )( bitrate >> 0 ),  ( uint8_t )( params->pulse_shape ), params->bw_dsb_param,
         ( uint8_t )( fdev >> 16 ),    ( uint8_t )( fdev >> 8 ),           ( uint8_t )( fdev >> 0 ),
     };
 
-    status = ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_MODULATION_PARAMS_GFSK, 0, 0 );
+    llcc68_status_t status =
+        ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_MODULATION_PARAMS_GFSK, 0, 0 );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -653,9 +653,21 @@ llcc68_status_t llcc68_set_gfsk_mod_params( const void* context, const llcc68_mo
     return status;
 }
 
+llcc68_status_t llcc68_set_bpsk_mod_params( const void* context, const llcc68_mod_params_bpsk_t* params )
+{
+    const uint32_t bitrate = ( uint32_t )( 32 * LLCC68_XTAL_FREQ / params->br_in_bps );
+
+    const uint8_t buf[LLCC68_SIZE_SET_MODULATION_PARAMS_BPSK] = {
+        LLCC68_SET_MODULATION_PARAMS, ( uint8_t )( bitrate >> 16 ),       ( uint8_t )( bitrate >> 8 ),
+        ( uint8_t )( bitrate >> 0 ),  ( uint8_t )( params->pulse_shape ),
+    };
+
+    return ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_MODULATION_PARAMS_BPSK, 0, 0 );
+}
+
 llcc68_status_t llcc68_set_lora_mod_params( const void* context, const llcc68_mod_params_lora_t* params )
 {
-    llcc68_status_t status = LLCC68_STATUS_ERROR;
+    llcc68_status_t status;
 
     if( ( ( params->bw == LLCC68_LORA_BW_250 ) && ( params->sf == LLCC68_LORA_SF11 ) ) ||
         ( ( params->bw == LLCC68_LORA_BW_125 ) &&
@@ -670,7 +682,7 @@ llcc68_status_t llcc68_set_lora_mod_params( const void* context, const llcc68_mo
             ( uint8_t )( params->cr ),    params->ldro & 0x01,
         };
 
-        status = llcc68_hal_write( context, buf, LLCC68_SIZE_SET_MODULATION_PARAMS_LORA, 0, 0 );
+        status = ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_MODULATION_PARAMS_LORA, 0, 0 );
 
         if( status == LLCC68_STATUS_OK )
         {
@@ -701,10 +713,31 @@ llcc68_status_t llcc68_set_gfsk_pkt_params( const void* context, const llcc68_pk
     return ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_PKT_PARAMS_GFSK, 0, 0 );
 }
 
+llcc68_status_t llcc68_set_bpsk_pkt_params( const void* context, const llcc68_pkt_params_bpsk_t* params )
+{
+    const uint8_t buf[LLCC68_SIZE_SET_PKT_PARAMS_BPSK] = {
+        LLCC68_SET_PKT_PARAMS,
+        params->pld_len_in_bytes,
+    };
+
+    llcc68_status_t status =
+        ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_PKT_PARAMS_BPSK, 0, 0 );
+    if( status != LLCC68_STATUS_OK )
+    {
+        return status;
+    }
+
+    const uint8_t buf2[] = {
+        ( uint8_t )( params->ramp_up_delay >> 8 ),   ( uint8_t )( params->ramp_up_delay >> 0 ),
+        ( uint8_t )( params->ramp_down_delay >> 8 ), ( uint8_t )( params->ramp_down_delay >> 0 ),
+        ( uint8_t )( params->pld_len_in_bits >> 8 ), ( uint8_t )( params->pld_len_in_bits >> 0 ),
+    };
+
+    return llcc68_write_register( context, 0x00F0, buf2, sizeof( buf2 ) );
+}
+
 llcc68_status_t llcc68_set_lora_pkt_params( const void* context, const llcc68_pkt_params_lora_t* params )
 {
-    llcc68_status_t status = LLCC68_STATUS_ERROR;
-
     const uint8_t buf[LLCC68_SIZE_SET_PKT_PARAMS_LORA] = {
         LLCC68_SET_PKT_PARAMS,
         ( uint8_t )( params->preamble_len_in_symb >> 8 ),
@@ -715,7 +748,8 @@ llcc68_status_t llcc68_set_lora_pkt_params( const void* context, const llcc68_pk
         ( uint8_t )( params->invert_iq_is_on ? 1 : 0 ),
     };
 
-    status = ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_PKT_PARAMS_LORA, 0, 0 );
+    llcc68_status_t status =
+        ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_PKT_PARAMS_LORA, 0, 0 );
 
     // WORKAROUND - Optimizing the Inverted IQ Operation, see datasheet DS_LLCC68_V1.0 §15.4
     if( status == LLCC68_STATUS_OK )
@@ -779,9 +813,8 @@ llcc68_status_t llcc68_set_buffer_base_address( const void* context, const uint8
 
 llcc68_status_t llcc68_set_lora_symb_nb_timeout( const void* context, const uint8_t nb_of_symbs )
 {
-    llcc68_status_t status = LLCC68_STATUS_ERROR;
-    uint8_t         exp    = 0;
-    uint8_t         mant =
+    uint8_t exp = 0;
+    uint8_t mant =
         ( ( ( nb_of_symbs > LLCC68_MAX_LORA_SYMB_NUM_TIMEOUT ) ? LLCC68_MAX_LORA_SYMB_NUM_TIMEOUT : nb_of_symbs ) +
           1 ) >>
         1;
@@ -797,7 +830,8 @@ llcc68_status_t llcc68_set_lora_symb_nb_timeout( const void* context, const uint
         mant << ( 2 * exp + 1 ),
     };
 
-    status = ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_LORA_SYMB_NUM_TIMEOUT, 0, 0 );
+    llcc68_status_t status =
+        ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_LORA_SYMB_NUM_TIMEOUT, 0, 0 );
 
     if( ( status == LLCC68_STATUS_OK ) && ( nb_of_symbs > 0 ) )
     {
@@ -817,10 +851,10 @@ llcc68_status_t llcc68_get_status( const void* context, llcc68_chip_status_t* ra
     const uint8_t buf[LLCC68_SIZE_GET_STATUS] = {
         LLCC68_GET_STATUS,
     };
-    uint8_t         status_local = 0;
-    llcc68_status_t status       = LLCC68_STATUS_ERROR;
+    uint8_t status_local = 0;
 
-    status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_STATUS, &status_local, 1 );
+    const llcc68_status_t status =
+        ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_STATUS, &status_local, 1 );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -839,11 +873,10 @@ llcc68_status_t llcc68_get_rx_buffer_status( const void* context, llcc68_rx_buff
         LLCC68_GET_RX_BUFFER_STATUS,
         LLCC68_NOP,
     };
-    uint8_t         status_local[sizeof( llcc68_rx_buffer_status_t )] = { 0x00 };
-    llcc68_status_t status                                            = LLCC68_STATUS_ERROR;
+    uint8_t status_local[sizeof( llcc68_rx_buffer_status_t )] = { 0x00 };
 
-    status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_RX_BUFFER_STATUS, status_local,
-                                                  sizeof( llcc68_rx_buffer_status_t ) );
+    const llcc68_status_t status = ( llcc68_status_t ) llcc68_hal_read(
+        context, buf, LLCC68_SIZE_GET_RX_BUFFER_STATUS, status_local, sizeof( llcc68_rx_buffer_status_t ) );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -860,10 +893,10 @@ llcc68_status_t llcc68_get_gfsk_pkt_status( const void* context, llcc68_pkt_stat
         LLCC68_GET_PKT_STATUS,
         LLCC68_NOP,
     };
-    uint8_t         pkt_status_local[3] = { 0x00 };
-    llcc68_status_t status              = LLCC68_STATUS_ERROR;
+    uint8_t pkt_status_local[3] = { 0x00 };
 
-    status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_PKT_STATUS, pkt_status_local, 3 );
+    const llcc68_status_t status =
+        ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_PKT_STATUS, pkt_status_local, 3 );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -893,11 +926,10 @@ llcc68_status_t llcc68_get_lora_pkt_status( const void* context, llcc68_pkt_stat
         LLCC68_GET_PKT_STATUS,
         LLCC68_NOP,
     };
-    uint8_t         pkt_status_local[sizeof( llcc68_pkt_status_lora_t )] = { 0x00 };
-    llcc68_status_t status                                               = LLCC68_STATUS_ERROR;
+    uint8_t pkt_status_local[sizeof( llcc68_pkt_status_lora_t )] = { 0x00 };
 
-    status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_PKT_STATUS, pkt_status_local,
-                                                  sizeof( llcc68_pkt_status_lora_t ) );
+    const llcc68_status_t status = ( llcc68_status_t ) llcc68_hal_read(
+        context, buf, LLCC68_SIZE_GET_PKT_STATUS, pkt_status_local, sizeof( llcc68_pkt_status_lora_t ) );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -915,10 +947,10 @@ llcc68_status_t llcc68_get_rssi_inst( const void* context, int16_t* rssi_in_dbm 
         LLCC68_GET_RSSI_INST,
         LLCC68_NOP,
     };
-    uint8_t         rssi_local = 0x00;
-    llcc68_status_t status     = LLCC68_STATUS_ERROR;
+    uint8_t rssi_local = 0x00;
 
-    status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_RSSI_INST, &rssi_local, 1 );
+    const llcc68_status_t status =
+        ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_RSSI_INST, &rssi_local, 1 );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -934,11 +966,10 @@ llcc68_status_t llcc68_get_gfsk_stats( const void* context, llcc68_stats_gfsk_t*
         LLCC68_GET_STATS,
         LLCC68_NOP,
     };
-    uint8_t         stats_local[sizeof( llcc68_stats_gfsk_t )] = { 0 };
-    llcc68_status_t status                                     = LLCC68_STATUS_ERROR;
+    uint8_t stats_local[sizeof( llcc68_stats_gfsk_t )] = { 0 };
 
-    status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_STATS, stats_local,
-                                                  sizeof( llcc68_stats_gfsk_t ) );
+    const llcc68_status_t status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_STATS,
+                                                                        stats_local, sizeof( llcc68_stats_gfsk_t ) );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -956,11 +987,10 @@ llcc68_status_t llcc68_get_lora_stats( const void* context, llcc68_stats_lora_t*
         LLCC68_GET_STATS,
         LLCC68_NOP,
     };
-    uint8_t         stats_local[sizeof( llcc68_stats_lora_t )] = { 0 };
-    llcc68_status_t status                                     = LLCC68_STATUS_ERROR;
+    uint8_t stats_local[sizeof( llcc68_stats_lora_t )] = { 0 };
 
-    status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_STATS, stats_local,
-                                                  sizeof( llcc68_stats_lora_t ) );
+    const llcc68_status_t status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_STATS,
+                                                                        stats_local, sizeof( llcc68_stats_lora_t ) );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -1000,11 +1030,10 @@ llcc68_status_t llcc68_get_device_errors( const void* context, llcc68_errors_mas
         LLCC68_GET_DEVICE_ERRORS,
         LLCC68_NOP,
     };
-    uint8_t         errors_local[sizeof( llcc68_errors_mask_t )] = { 0x00 };
-    llcc68_status_t status                                       = LLCC68_STATUS_ERROR;
+    uint8_t errors_local[sizeof( llcc68_errors_mask_t )] = { 0x00 };
 
-    status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_DEVICE_ERRORS, errors_local,
-                                                  sizeof( llcc68_errors_mask_t ) );
+    const llcc68_status_t status = ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_DEVICE_ERRORS,
+                                                                        errors_local, sizeof( llcc68_errors_mask_t ) );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -1273,11 +1302,15 @@ llcc68_status_t llcc68_cfg_rx_boosted( const void* context, const bool state )
 llcc68_status_t llcc68_set_gfsk_sync_word( const void* context, const uint8_t* sync_word, const uint8_t sync_word_len )
 {
     llcc68_status_t status = LLCC68_STATUS_ERROR;
-    uint8_t         buf[8] = { 0 };
 
     if( sync_word_len <= 8 )
     {
-        memcpy( buf, sync_word, sync_word_len );
+        uint8_t buf[8] = { 0 };
+
+        for( int i = 0; i < sync_word_len; i++ )
+        {
+            buf[i] = sync_word[i];
+        }
         status = llcc68_write_register( context, LLCC68_REG_SYNCWORDBASEADDRESS, buf, 8 );
     }
 
@@ -1286,10 +1319,9 @@ llcc68_status_t llcc68_set_gfsk_sync_word( const void* context, const uint8_t* s
 
 llcc68_status_t llcc68_set_lora_sync_word( const void* context, const uint8_t sync_word )
 {
-    llcc68_status_t status    = LLCC68_STATUS_ERROR;
-    uint8_t         buffer[2] = { 0x00 };
+    uint8_t buffer[2] = { 0x00 };
 
-    status = llcc68_read_register( context, LLCC68_REG_LR_SYNCWORD, buffer, 2 );
+    llcc68_status_t status = llcc68_read_register( context, LLCC68_REG_LR_SYNCWORD, buffer, 2 );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -1318,12 +1350,11 @@ llcc68_status_t llcc68_set_gfsk_crc_polynomial( const void* context, const uint1
 
 llcc68_status_t llcc68_set_gfsk_whitening_seed( const void* context, const uint16_t seed )
 {
-    llcc68_status_t status    = LLCC68_STATUS_ERROR;
-    uint8_t         reg_value = 0;
+    uint8_t reg_value = 0;
 
     // The LLCC68_REG_WHITSEEDBASEADDRESS @ref LSBit is used for the seed value. The 7 MSBits must not be modified.
     // Thus, we first need to read the current value and then change the LSB according to the provided seed @ref value.
-    status = llcc68_read_register( context, LLCC68_REG_WHITSEEDBASEADDRESS, &reg_value, 1 );
+    llcc68_status_t status = llcc68_read_register( context, LLCC68_REG_WHITSEEDBASEADDRESS, &reg_value, 1 );
     if( status == LLCC68_STATUS_OK )
     {
         reg_value = ( reg_value & 0xFE ) | ( ( uint8_t )( seed >> 8 ) & 0x01 );
@@ -1340,10 +1371,9 @@ llcc68_status_t llcc68_set_gfsk_whitening_seed( const void* context, const uint1
 
 llcc68_status_t llcc68_cfg_tx_clamp( const void* context )
 {
-    llcc68_status_t status    = LLCC68_STATUS_ERROR;
-    uint8_t         reg_value = 0x00;
+    uint8_t reg_value = 0x00;
 
-    status = llcc68_read_register( context, LLCC68_REG_TX_CLAMP_CFG, &reg_value, 1 );
+    llcc68_status_t status = llcc68_read_register( context, LLCC68_REG_TX_CLAMP_CFG, &reg_value, 1 );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -1356,11 +1386,9 @@ llcc68_status_t llcc68_cfg_tx_clamp( const void* context )
 
 llcc68_status_t llcc68_stop_rtc( const void* context )
 {
-    llcc68_status_t status    = LLCC68_STATUS_ERROR;
-    uint8_t         reg_value = 0;
+    uint8_t reg_value = 0;
 
-    reg_value = 0;
-    status    = llcc68_write_register( context, LLCC68_REG_RTC_CTRL, &reg_value, 1 );
+    llcc68_status_t status = llcc68_write_register( context, LLCC68_REG_RTC_CTRL, &reg_value, 1 );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -1392,10 +1420,9 @@ llcc68_status_t llcc68_set_trimming_capacitor_values( const void* context, const
 llcc68_status_t llcc68_add_registers_to_retention_list( const void* context, const uint16_t* register_addr,
                                                         uint8_t register_nb )
 {
-    llcc68_status_t status = LLCC68_STATUS_ERROR;
-    uint8_t         buffer[9];
+    uint8_t buffer[9] = {0};
 
-    status = llcc68_read_register( context, LLCC68_REG_RETENTION_LIST_BASE_ADDRESS, buffer, 9 );
+    llcc68_status_t status = llcc68_read_register( context, LLCC68_REG_RETENTION_LIST_BASE_ADDRESS, buffer, 9 );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -1450,11 +1477,10 @@ llcc68_status_t llcc68_init_retention_list( const void* context )
 
 llcc68_status_t llcc68_get_lora_params_from_header( const void* context, llcc68_lora_cr_t* cr, bool* crc_is_on )
 {
-    llcc68_status_t status = LLCC68_STATUS_ERROR;
-    uint8_t         buffer_cr;
-    uint8_t         buffer_crc;
+    uint8_t buffer_cr = 0;
+    uint8_t buffer_crc = 0;
 
-    status = llcc68_read_register( context, LLCC68_REG_LR_HEADER_CR, &buffer_cr, 1 );
+    llcc68_status_t status = llcc68_read_register( context, LLCC68_REG_LR_HEADER_CR, &buffer_cr, 1 );
 
     if( status == LLCC68_STATUS_OK )
     {
@@ -1478,10 +1504,9 @@ llcc68_status_t llcc68_get_lora_params_from_header( const void* context, llcc68_
 static llcc68_status_t llcc68_tx_modulation_workaround( const void* context, llcc68_pkt_type_t pkt_type,
                                                         llcc68_lora_bw_t bw )
 {
-    llcc68_status_t status    = LLCC68_STATUS_ERROR;
-    uint8_t         reg_value = 0;
+    uint8_t reg_value = 0;
 
-    status = llcc68_read_register( context, LLCC68_REG_TX_MODULATION, &reg_value, 1 );
+    llcc68_status_t status = llcc68_read_register( context, LLCC68_REG_TX_MODULATION, &reg_value, 1 );
 
     if( status == LLCC68_STATUS_OK )
     {

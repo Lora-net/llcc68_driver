@@ -135,6 +135,30 @@ extern "C" {
 #define LLCC68_GFSK_RX_STATUS_ADRS_ERROR_POS ( 5U )
 #define LLCC68_GFSK_RX_STATUS_ADRS_ERROR_MASK ( 0x01UL << LLCC68_GFSK_RX_STATUS_ADRS_ERROR_POS )
 
+/*!
+ * \brief Ramp-up delay for the power amplifier
+ *
+ * This parameter configures the delay to fine tune the ramp-up time of the power amplifier for BPSK operation.
+ */
+enum
+{
+    LLCC68_SIGFOX_DBPSK_RAMP_UP_TIME_DEFAULT = 0x0000,  //!< No optimization
+    LLCC68_SIGFOX_DBPSK_RAMP_UP_TIME_100_BPS = 0x370F,  //!< Ramp-up optimization for 100bps
+    LLCC68_SIGFOX_DBPSK_RAMP_UP_TIME_600_BPS = 0x092F,  //!< Ramp-up optimization for 600bps
+};
+
+/*!
+ * \brief Ramp-down delay for the power amplifier
+ *
+ * This parameter configures the delay to fine tune the ramp-down time of the power amplifier for BPSK operation.
+ */
+enum
+{
+    LLCC68_SIGFOX_DBPSK_RAMP_DOWN_TIME_DEFAULT = 0x0000,  //!< No optimization
+    LLCC68_SIGFOX_DBPSK_RAMP_DOWN_TIME_100_BPS = 0x1D70,  //!< Ramp-down optimization for 100bps
+    LLCC68_SIGFOX_DBPSK_RAMP_DOWN_TIME_600_BPS = 0x04E1,  //!< Ramp-down optimization for 600bps
+};
+
 /*
  * -----------------------------------------------------------------------------
  * --- PUBLIC TYPES ------------------------------------------------------------
@@ -264,6 +288,7 @@ typedef enum llcc68_pkt_types_e
 {
     LLCC68_PKT_TYPE_GFSK    = 0x00,
     LLCC68_PKT_TYPE_LORA    = 0x01,
+    LLCC68_PKT_TYPE_BPSK    = 0x02,
 } llcc68_pkt_type_t;
 
 /**
@@ -292,6 +317,14 @@ typedef enum llcc68_gfsk_pulse_shape_e
     LLCC68_GFSK_PULSE_SHAPE_BT_07 = 0x0A,
     LLCC68_GFSK_PULSE_SHAPE_BT_1  = 0x0B,
 } llcc68_gfsk_pulse_shape_t;
+
+/**
+ * @brief LLCC68 BPSK modulation shaping enumeration definition
+ */
+typedef enum
+{
+    LLCC68_DBPSK_PULSE_SHAPE = 0x16,  //!< Double OSR / RRC / BT 0.7
+} llcc68_bpsk_pulse_shape_t;
 
 /**
  * @brief LLCC68 GFSK Rx bandwidth enumeration definition
@@ -331,6 +364,15 @@ typedef struct llcc68_mod_params_gfsk_s
     llcc68_gfsk_pulse_shape_t pulse_shape;
     llcc68_gfsk_bw_t          bw_dsb_param;
 } llcc68_mod_params_gfsk_t;
+
+/**
+ * @brief Modulation configuration for BPSK packet
+ */
+typedef struct llcc68_mod_params_bpsk_s
+{
+    uint32_t                  br_in_bps;    //!< BPSK bitrate [bit/s]
+    llcc68_bpsk_pulse_shape_t pulse_shape;  //!< BPSK pulse shape
+} llcc68_mod_params_bpsk_t;
 
 /**
  * @brief LLCC68 LoRa spreading factor enumeration definition
@@ -472,6 +514,18 @@ typedef struct llcc68_pkt_params_gfsk_s
     llcc68_gfsk_crc_types_t         crc_type;               //!< CRC type configuration
     llcc68_gfsk_dc_free_t           dc_free;                //!< Whitening configuration
 } llcc68_pkt_params_gfsk_t;
+
+/**
+ * @brief LLCC68 BPSK packet parameters structure definition
+ */
+typedef struct llcc68_pkt_params_bpsk_s
+{
+    uint8_t  pld_len_in_bytes;  //!< Payload length [bytes]
+    uint16_t ramp_up_delay;     //!< Delay to fine tune ramp-up time, if non-zero
+    uint16_t ramp_down_delay;   //!< Delay to fine tune ramp-down time, if non-zero
+    uint16_t pld_len_in_bits;   //!< If non-zero, used to ramp down PA before end of a payload with length that is not a
+                                //!< multiple of 8
+} llcc68_pkt_params_bpsk_t;
 
 /**
  * @brief LLCC68 LoRa CAD number of symbols enumeration definition
@@ -1147,6 +1201,19 @@ llcc68_status_t llcc68_set_tx_params( const void* context, const int8_t pwr_in_d
 llcc68_status_t llcc68_set_gfsk_mod_params( const void* context, const llcc68_mod_params_gfsk_t* params );
 
 /**
+ * @brief Set the modulation parameters for BPSK packets
+ *
+ * @remark The command @ref llcc68_set_pkt_type must be called prior to this
+ * one.
+ *
+ * @param [in] context Chip implementation context
+ * @param [in] params The structure of BPSK modulation configuration
+ *
+ * @returns Operation status
+ */
+llcc68_status_t llcc68_set_bpsk_mod_params( const void* context, const llcc68_mod_params_bpsk_t* params );
+
+/**
  * @brief Set the modulation parameters for LoRa packets
  *
  * @remark The command @ref llcc68_set_pkt_type must be called prior to this one.
@@ -1170,6 +1237,19 @@ llcc68_status_t llcc68_set_lora_mod_params( const void* context, const llcc68_mo
  * @returns Operation status
  */
 llcc68_status_t llcc68_set_gfsk_pkt_params( const void* context, const llcc68_pkt_params_gfsk_t* params );
+
+/**
+ * @brief Set the packet parameters for BPSK packets
+ *
+ * @remark The command @ref llcc68_set_pkt_type must be called prior to this
+ * one.
+ *
+ * @param [in] context Chip implementation context
+ * @param [in] params The structure of BPSK packet configuration
+ *
+ * @returns Operation status
+ */
+llcc68_status_t llcc68_set_bpsk_pkt_params( const void* context, const llcc68_pkt_params_bpsk_t* params );
 
 /**
  * @brief Set the packet parameters for LoRa packets

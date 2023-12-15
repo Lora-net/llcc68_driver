@@ -55,8 +55,8 @@ extern "C" {
  */
 
 #define LLCC68_DRIVER_VERSION_MAJOR 2
-#define LLCC68_DRIVER_VERSION_MINOR 2
-#define LLCC68_DRIVER_VERSION_PATCH 0
+#define LLCC68_DRIVER_VERSION_MINOR 3
+#define LLCC68_DRIVER_VERSION_PATCH 2
 
 /*
  * -----------------------------------------------------------------------------
