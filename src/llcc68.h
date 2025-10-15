@@ -46,6 +46,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "llcc68_status.h"
 
 /*
  * -----------------------------------------------------------------------------
@@ -135,45 +136,10 @@ extern "C" {
 #define LLCC68_GFSK_RX_STATUS_ADRS_ERROR_POS ( 5U )
 #define LLCC68_GFSK_RX_STATUS_ADRS_ERROR_MASK ( 0x01UL << LLCC68_GFSK_RX_STATUS_ADRS_ERROR_POS )
 
-/*!
- * \brief Ramp-up delay for the power amplifier
- *
- * This parameter configures the delay to fine tune the ramp-up time of the power amplifier for BPSK operation.
- */
-enum
-{
-    LLCC68_SIGFOX_DBPSK_RAMP_UP_TIME_DEFAULT = 0x0000,  //!< No optimization
-    LLCC68_SIGFOX_DBPSK_RAMP_UP_TIME_100_BPS = 0x370F,  //!< Ramp-up optimization for 100bps
-    LLCC68_SIGFOX_DBPSK_RAMP_UP_TIME_600_BPS = 0x092F,  //!< Ramp-up optimization for 600bps
-};
-
-/*!
- * \brief Ramp-down delay for the power amplifier
- *
- * This parameter configures the delay to fine tune the ramp-down time of the power amplifier for BPSK operation.
- */
-enum
-{
-    LLCC68_SIGFOX_DBPSK_RAMP_DOWN_TIME_DEFAULT = 0x0000,  //!< No optimization
-    LLCC68_SIGFOX_DBPSK_RAMP_DOWN_TIME_100_BPS = 0x1D70,  //!< Ramp-down optimization for 100bps
-    LLCC68_SIGFOX_DBPSK_RAMP_DOWN_TIME_600_BPS = 0x04E1,  //!< Ramp-down optimization for 600bps
-};
-
 /*
  * -----------------------------------------------------------------------------
  * --- PUBLIC TYPES ------------------------------------------------------------
  */
-
-/**
- * @brief LLCC68 APIs return status enumeration definition
- */
-typedef enum llcc68_status_e
-{
-    LLCC68_STATUS_OK = 0,
-    LLCC68_STATUS_UNSUPPORTED_FEATURE,
-    LLCC68_STATUS_UNKNOWN_VALUE,
-    LLCC68_STATUS_ERROR,
-} llcc68_status_t;
 
 /**
  * @brief LLCC68 sleep mode configurations definition
@@ -288,7 +254,6 @@ typedef enum llcc68_pkt_types_e
 {
     LLCC68_PKT_TYPE_GFSK    = 0x00,
     LLCC68_PKT_TYPE_LORA    = 0x01,
-    LLCC68_PKT_TYPE_BPSK    = 0x02,
 } llcc68_pkt_type_t;
 
 /**
@@ -317,14 +282,6 @@ typedef enum llcc68_gfsk_pulse_shape_e
     LLCC68_GFSK_PULSE_SHAPE_BT_07 = 0x0A,
     LLCC68_GFSK_PULSE_SHAPE_BT_1  = 0x0B,
 } llcc68_gfsk_pulse_shape_t;
-
-/**
- * @brief LLCC68 BPSK modulation shaping enumeration definition
- */
-typedef enum
-{
-    LLCC68_DBPSK_PULSE_SHAPE = 0x16,  //!< Double OSR / RRC / BT 0.7
-} llcc68_bpsk_pulse_shape_t;
 
 /**
  * @brief LLCC68 GFSK Rx bandwidth enumeration definition
@@ -364,15 +321,6 @@ typedef struct llcc68_mod_params_gfsk_s
     llcc68_gfsk_pulse_shape_t pulse_shape;
     llcc68_gfsk_bw_t          bw_dsb_param;
 } llcc68_mod_params_gfsk_t;
-
-/**
- * @brief Modulation configuration for BPSK packet
- */
-typedef struct llcc68_mod_params_bpsk_s
-{
-    uint32_t                  br_in_bps;    //!< BPSK bitrate [bit/s]
-    llcc68_bpsk_pulse_shape_t pulse_shape;  //!< BPSK pulse shape
-} llcc68_mod_params_bpsk_t;
 
 /**
  * @brief LLCC68 LoRa spreading factor enumeration definition
@@ -514,18 +462,6 @@ typedef struct llcc68_pkt_params_gfsk_s
     llcc68_gfsk_crc_types_t         crc_type;               //!< CRC type configuration
     llcc68_gfsk_dc_free_t           dc_free;                //!< Whitening configuration
 } llcc68_pkt_params_gfsk_t;
-
-/**
- * @brief LLCC68 BPSK packet parameters structure definition
- */
-typedef struct llcc68_pkt_params_bpsk_s
-{
-    uint8_t  pld_len_in_bytes;  //!< Payload length [bytes]
-    uint16_t ramp_up_delay;     //!< Delay to fine tune ramp-up time, if non-zero
-    uint16_t ramp_down_delay;   //!< Delay to fine tune ramp-down time, if non-zero
-    uint16_t pld_len_in_bits;   //!< If non-zero, used to ramp down PA before end of a payload with length that is not a
-                                //!< multiple of 8
-} llcc68_pkt_params_bpsk_t;
 
 /**
  * @brief LLCC68 LoRa CAD number of symbols enumeration definition
@@ -1193,25 +1129,18 @@ llcc68_status_t llcc68_set_tx_params( const void* context, const int8_t pwr_in_d
  * @remark The command @ref llcc68_set_pkt_type must be called prior to this
  * one.
  *
+ * Depending on the modulation to configure, workarounds may applies.
+ * Refer to @ref llcc68_workaround_gfsk_0_6_kbps, @ref llcc68_workaround_gfsk_1_2_kbps and @ref
+ * llcc68_workaround_gfsk_reset.
+ *
  * @param [in] context Chip implementation context
  * @param [in] params The structure of GFSK modulation configuration
  *
  * @returns Operation status
+ *
+ * @see llcc68_workaround_gfsk_0_6_kbps, llcc68_workaround_gfsk_1_2_kbps, llcc68_workaround_gfsk_reset
  */
 llcc68_status_t llcc68_set_gfsk_mod_params( const void* context, const llcc68_mod_params_gfsk_t* params );
-
-/**
- * @brief Set the modulation parameters for BPSK packets
- *
- * @remark The command @ref llcc68_set_pkt_type must be called prior to this
- * one.
- *
- * @param [in] context Chip implementation context
- * @param [in] params The structure of BPSK modulation configuration
- *
- * @returns Operation status
- */
-llcc68_status_t llcc68_set_bpsk_mod_params( const void* context, const llcc68_mod_params_bpsk_t* params );
 
 /**
  * @brief Set the modulation parameters for LoRa packets
@@ -1237,19 +1166,6 @@ llcc68_status_t llcc68_set_lora_mod_params( const void* context, const llcc68_mo
  * @returns Operation status
  */
 llcc68_status_t llcc68_set_gfsk_pkt_params( const void* context, const llcc68_pkt_params_gfsk_t* params );
-
-/**
- * @brief Set the packet parameters for BPSK packets
- *
- * @remark The command @ref llcc68_set_pkt_type must be called prior to this
- * one.
- *
- * @param [in] context Chip implementation context
- * @param [in] params The structure of BPSK packet configuration
- *
- * @returns Operation status
- */
-llcc68_status_t llcc68_set_bpsk_pkt_params( const void* context, const llcc68_pkt_params_bpsk_t* params );
 
 /**
  * @brief Set the packet parameters for LoRa packets
@@ -1734,6 +1650,71 @@ llcc68_status_t llcc68_init_retention_list( const void* context );
  * @returns Operation status
  */
 llcc68_status_t llcc68_get_lora_params_from_header( const void* context, llcc68_lora_cr_t* cr, bool* crc_is_on );
+
+/**
+ * @brief Apply GFSK workaround for GFSK 1.2 kbps
+ *
+ * This workaround is to be applied after calling @ref llcc68_set_gfsk_mod_params and @ref llcc68_set_gfsk_pkt_params if
+ * an only if:
+ *  - llcc68_mod_params_gfsk_s.br_in_bps = 1200 bps; and
+ *  - llcc68_mod_params_gfsk_s.fdev_in_hz = 5000 Hz; and
+ *  - llcc68_mod_params_gfsk_s.bw_dsb_param = @ref LLCC68_GFSK_BW_19500
+ *
+ * @param [in] context Chip implementation context
+ *
+ * @return Operation status
+ *
+ * @see llcc68_set_gfsk_mod_params, llcc68_set_gfsk_pkt_params, llcc68_workaround_gfsk_reset
+ */
+llcc68_status_t llcc68_workaround_gfsk_1_2_kbps( const void* context );
+
+/**
+ * @brief Apply GFSK workaround for GFSK 0.6 kbps
+ *
+ * This workaround is to be applied after calling @ref llcc68_set_gfsk_mod_params and @ref llcc68_set_gfsk_pkt_params if
+ * an only if:
+ *  - llcc68_mod_params_gfsk_s.br_in_bps = 600 bps; and
+ *  - llcc68_mod_params_gfsk_s.fdev_in_hz = 800 Hz; and
+ *  - llcc68_mod_params_gfsk_s.bw_dsb_param = @ref LLCC68_GFSK_BW_4800
+ *
+ * @param [in] context Chip implementation context
+ *
+ * @return Operation status
+ *
+ * @see llcc68_set_gfsk_mod_params, llcc68_set_gfsk_pkt_params, llcc68_workaround_gfsk_reset
+ */
+llcc68_status_t llcc68_workaround_gfsk_0_6_kbps( const void* context );
+
+/**
+ * @brief Reset workaround applied by @ref llcc68_workaround_gfsk_1_2_kbps or llcc68_workaround_gfsk_0_6_kbps
+ *
+ * This workaround reset must be called before attempting to configure a modulation different from the one specified in
+ * @ref llcc68_workaround_gfsk_0_6_kbps or @ref llcc68_workaround_gfsk_1_2_kbps.
+ *
+ * @param [in] context Chip implementation context
+ *
+ * @return Operation status
+ *
+ * @see llcc68_workaround_gfsk_1_2_kbps, llcc68_workaround_gfsk_0_6_kbps
+ */
+llcc68_status_t llcc68_workaround_gfsk_reset( const void* context );
+
+/**
+ * @brief 15.1.2 Workaround
+ *
+ * This workaround is automatically called by the driver where appropriate.
+ *
+ * @remark Before any packet transmission, bit #2 of LLCC68_REG_TX_MODULATION shall be set to:
+ * 0 if the LoRa BW = 500 kHz
+ * 1 for any other LoRa BW and other modulation
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] pkt_type The modulation type
+ * @param [in] bw In case of LoRa modulation the bandwith must be specified
+ *
+ * @returns Operation status
+ */
+llcc68_status_t llcc68_tx_modulation_workaround( const void* context, llcc68_pkt_type_t pkt_type, llcc68_lora_bw_t bw );
 
 #ifdef __cplusplus
 }

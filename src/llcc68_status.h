@@ -1,10 +1,10 @@
-/*!
- * @file      llcc68_driver_version.h
+/**
+ * @file      llcc68_status.h
  *
- * @brief     Placeholder to keep the version of LLCC68 driver.
+ * @brief     LLCC68 status radio driver definition
  *
  * The Clear BSD License
- * Copyright Semtech Corporation 2023. All rights reserved.
+ * Copyright Semtech Corporation 2025. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the disclaimer
@@ -32,8 +32,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef LLCC68_DRIVER_VERSION_H
-#define LLCC68_DRIVER_VERSION_H
+#ifndef LLCC68_STATUS_H
+#define LLCC68_STATUS_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,32 +54,31 @@ extern "C" {
  * --- PUBLIC CONSTANTS --------------------------------------------------------
  */
 
-/**
- * @brief Value of driver version string
- */
-#define LLCC68_DRIVER_VERSION "v2.5.0"
-
 /*
  * -----------------------------------------------------------------------------
  * --- PUBLIC TYPES ------------------------------------------------------------
  */
+
+/**
+ * @brief LLCC68 APIs return status enumeration definition
+ */
+typedef enum llcc68_status_e
+{
+    LLCC68_STATUS_OK = 0,
+    LLCC68_STATUS_UNSUPPORTED_FEATURE,
+    LLCC68_STATUS_UNKNOWN_VALUE,
+    LLCC68_STATUS_ERROR,
+} llcc68_status_t;
 
 /*
  * -----------------------------------------------------------------------------
  * --- PUBLIC FUNCTIONS PROTOTYPES ---------------------------------------------
  */
 
-/**
- * @brief Get version of driver as string
- *
- * @return String describing driver version
- */
-const char* llcc68_driver_version_get_version_string( void );
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif  // LLCC68_DRIVER_VERSION_H
+#endif  // LLCC68_STATUS_H
 
 /* --- EOF ------------------------------------------------------------------ */

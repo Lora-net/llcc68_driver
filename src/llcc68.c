@@ -71,6 +71,26 @@
  */
 #define LLCC68_PLL_STEP_SCALED ( LLCC68_XTAL_FREQ >> ( 25 - LLCC68_PLL_STEP_SHIFT_AMOUNT ) )
 
+/**
+ * @brief Register to apply GFSK workaround
+ */
+#define LLCC68_REG_GFSK_WORKAROUND_1 ( 0x06D1 )
+
+/**
+ * @brief Register to apply GFSK workaround
+ */
+#define LLCC68_REG_GFSK_WORKAROUND_2 ( 0x089b )
+
+/**
+ * @brief Register to apply GFSK workaround
+ */
+#define LLCC68_REG_GFSK_WORKAROUND_3 ( 0x08b8 )
+
+/**
+ * @brief Register to apply GFSK workaround
+ */
+#define LLCC68_REG_GFSK_WORKAROUND_4 ( 0x06AC )
+
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE TYPES -----------------------------------------------------------
@@ -172,10 +192,8 @@ typedef enum llcc68_commands_size_e
     LLCC68_SIZE_GET_PKT_TYPE               = 2,
     LLCC68_SIZE_SET_TX_PARAMS              = 3,
     LLCC68_SIZE_SET_MODULATION_PARAMS_GFSK = 9,
-    LLCC68_SIZE_SET_MODULATION_PARAMS_BPSK = 5,
     LLCC68_SIZE_SET_MODULATION_PARAMS_LORA = 5,
     LLCC68_SIZE_SET_PKT_PARAMS_GFSK        = 10,
-    LLCC68_SIZE_SET_PKT_PARAMS_BPSK        = 2,
     LLCC68_SIZE_SET_PKT_PARAMS_LORA        = 7,
     LLCC68_SIZE_SET_CAD_PARAMS             = 8,
     LLCC68_SIZE_SET_BUFFER_BASE_ADDRESS    = 3,
@@ -220,25 +238,10 @@ gfsk_bw_t gfsk_bw[] = {
  * --- PRIVATE FUNCTIONS DECLARATION -------------------------------------------
  */
 
-/**
- * @brief 15.1.2 Workaround
- *
- * @remark Before any packet transmission, bit #2 of LLCC68_REG_TX_MODULATION shall be set to:
- * 0 if the LoRa BW = 500 kHz
- * 1 for any other LoRa BW
- * 1 for any (G)FSK configuration
- *
- * @param [in] context Chip implementation context.
- * @param [in] pkt_type The modulation type (G)FSK/LoRa
- * @param [in] bw In case of LoRa modulation the bandwith must be specified
- *
- * @returns Operation status
- */
-static llcc68_status_t llcc68_tx_modulation_workaround( const void* context, llcc68_pkt_type_t pkt_type,
-                                                        llcc68_lora_bw_t bw );
-
 static inline uint32_t llcc68_get_gfsk_crc_len_in_bytes( llcc68_gfsk_crc_types_t crc_type );
 
+static llcc68_status_t llcc68_read_modify_write_register( const void* context, uint16_t address, uint8_t mask,
+                                                          uint8_t value );
 /*
  * -----------------------------------------------------------------------------
  * --- PUBLIC FUNCTIONS DEFINITION ---------------------------------------------
@@ -617,7 +620,14 @@ llcc68_status_t llcc68_get_pkt_type( const void* context, llcc68_pkt_type_t* pkt
         LLCC68_NOP,
     };
 
-    return ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_PKT_TYPE, ( uint8_t* ) pkt_type, 1 );
+    uint8_t               pkt_type_raw = 0;
+    const llcc68_status_t status =
+        ( llcc68_status_t ) llcc68_hal_read( context, buf, LLCC68_SIZE_GET_PKT_TYPE, &pkt_type_raw, 1 );
+    if( status == LLCC68_STATUS_OK )
+    {
+        *pkt_type = ( llcc68_pkt_type_t ) pkt_type_raw;
+    }
+    return status;
 }
 
 llcc68_status_t llcc68_set_tx_params( const void* context, const int8_t pwr_in_dbm, const llcc68_ramp_time_t ramp_time )
@@ -651,18 +661,6 @@ llcc68_status_t llcc68_set_gfsk_mod_params( const void* context, const llcc68_mo
         // WORKAROUND END
     }
     return status;
-}
-
-llcc68_status_t llcc68_set_bpsk_mod_params( const void* context, const llcc68_mod_params_bpsk_t* params )
-{
-    const uint32_t bitrate = ( uint32_t )( 32 * LLCC68_XTAL_FREQ / params->br_in_bps );
-
-    const uint8_t buf[LLCC68_SIZE_SET_MODULATION_PARAMS_BPSK] = {
-        LLCC68_SET_MODULATION_PARAMS, ( uint8_t )( bitrate >> 16 ),       ( uint8_t )( bitrate >> 8 ),
-        ( uint8_t )( bitrate >> 0 ),  ( uint8_t )( params->pulse_shape ),
-    };
-
-    return ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_MODULATION_PARAMS_BPSK, 0, 0 );
 }
 
 llcc68_status_t llcc68_set_lora_mod_params( const void* context, const llcc68_mod_params_lora_t* params )
@@ -711,29 +709,6 @@ llcc68_status_t llcc68_set_gfsk_pkt_params( const void* context, const llcc68_pk
     };
 
     return ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_PKT_PARAMS_GFSK, 0, 0 );
-}
-
-llcc68_status_t llcc68_set_bpsk_pkt_params( const void* context, const llcc68_pkt_params_bpsk_t* params )
-{
-    const uint8_t buf[LLCC68_SIZE_SET_PKT_PARAMS_BPSK] = {
-        LLCC68_SET_PKT_PARAMS,
-        params->pld_len_in_bytes,
-    };
-
-    llcc68_status_t status =
-        ( llcc68_status_t ) llcc68_hal_write( context, buf, LLCC68_SIZE_SET_PKT_PARAMS_BPSK, 0, 0 );
-    if( status != LLCC68_STATUS_OK )
-    {
-        return status;
-    }
-
-    const uint8_t buf2[] = {
-        ( uint8_t )( params->ramp_up_delay >> 8 ),   ( uint8_t )( params->ramp_up_delay >> 0 ),
-        ( uint8_t )( params->ramp_down_delay >> 8 ), ( uint8_t )( params->ramp_down_delay >> 0 ),
-        ( uint8_t )( params->pld_len_in_bits >> 8 ), ( uint8_t )( params->pld_len_in_bits >> 0 ),
-    };
-
-    return llcc68_write_register( context, 0x00F0, buf2, sizeof( buf2 ) );
 }
 
 llcc68_status_t llcc68_set_lora_pkt_params( const void* context, const llcc68_pkt_params_lora_t* params )
@@ -1420,7 +1395,7 @@ llcc68_status_t llcc68_set_trimming_capacitor_values( const void* context, const
 llcc68_status_t llcc68_add_registers_to_retention_list( const void* context, const uint16_t* register_addr,
                                                         uint8_t register_nb )
 {
-    uint8_t buffer[9] = {0};
+    uint8_t buffer[9] = { 0 };
 
     llcc68_status_t status = llcc68_read_register( context, LLCC68_REG_RETENTION_LIST_BASE_ADDRESS, buffer, 9 );
 
@@ -1428,6 +1403,11 @@ llcc68_status_t llcc68_add_registers_to_retention_list( const void* context, con
     {
         const uint8_t initial_nb_of_registers = buffer[0];
         uint8_t*      register_list           = &buffer[1];
+
+        if( initial_nb_of_registers > LLCC68_MAX_NB_REG_IN_RETENTION )
+        {
+            return LLCC68_STATUS_UNKNOWN_VALUE;
+        }
 
         for( uint8_t index = 0; index < register_nb; index++ )
         {
@@ -1477,7 +1457,7 @@ llcc68_status_t llcc68_init_retention_list( const void* context )
 
 llcc68_status_t llcc68_get_lora_params_from_header( const void* context, llcc68_lora_cr_t* cr, bool* crc_is_on )
 {
-    uint8_t buffer_cr = 0;
+    uint8_t buffer_cr  = 0;
     uint8_t buffer_crc = 0;
 
     llcc68_status_t status = llcc68_read_register( context, LLCC68_REG_LR_HEADER_CR, &buffer_cr, 1 );
@@ -1496,13 +1476,64 @@ llcc68_status_t llcc68_get_lora_params_from_header( const void* context, llcc68_
     return status;
 }
 
-/*
- * -----------------------------------------------------------------------------
- * --- PRIVATE FUNCTIONS DEFINITION --------------------------------------------
- */
+llcc68_status_t llcc68_workaround_gfsk_1_2_kbps( const void* context )
+{
+    return llcc68_read_modify_write_register( context, LLCC68_REG_GFSK_WORKAROUND_3, 0x10, 0x00 );
+}
 
-static llcc68_status_t llcc68_tx_modulation_workaround( const void* context, llcc68_pkt_type_t pkt_type,
-                                                        llcc68_lora_bw_t bw )
+llcc68_status_t llcc68_workaround_gfsk_0_6_kbps( const void* context )
+{
+    llcc68_status_t status = LLCC68_STATUS_ERROR;
+    if( ( status = llcc68_read_modify_write_register( context, LLCC68_REG_GFSK_WORKAROUND_1, 0x18, 0x18 ) ) !=
+        LLCC68_STATUS_OK )
+    {
+        return status;
+    }
+    if( ( status = llcc68_read_modify_write_register( context, LLCC68_REG_GFSK_WORKAROUND_2, 0x1C, 0x04 ) ) !=
+        LLCC68_STATUS_OK )
+    {
+        return status;
+    }
+    if( ( status = llcc68_read_modify_write_register( context, LLCC68_REG_GFSK_WORKAROUND_3, 0x10, 0x00 ) ) !=
+        LLCC68_STATUS_OK )
+    {
+        return status;
+    }
+    if( ( status = llcc68_read_modify_write_register( context, LLCC68_REG_GFSK_WORKAROUND_4, 0x70, 0x50 ) ) !=
+        LLCC68_STATUS_OK )
+    {
+        return status;
+    }
+    return status;
+}
+
+llcc68_status_t llcc68_workaround_gfsk_reset( const void* context )
+{
+    llcc68_status_t status = LLCC68_STATUS_ERROR;
+    if( ( status = llcc68_read_modify_write_register( context, LLCC68_REG_GFSK_WORKAROUND_1, 0x18, 0x08 ) ) !=
+        LLCC68_STATUS_OK )
+    {
+        return status;
+    }
+    if( ( status = llcc68_read_modify_write_register( context, LLCC68_REG_GFSK_WORKAROUND_2, 0x1C, 0x00 ) ) !=
+        LLCC68_STATUS_OK )
+    {
+        return status;
+    }
+    if( ( status = llcc68_read_modify_write_register( context, LLCC68_REG_GFSK_WORKAROUND_3, 0x10, 0x10 ) ) !=
+        LLCC68_STATUS_OK )
+    {
+        return status;
+    }
+    if( ( status = llcc68_read_modify_write_register( context, LLCC68_REG_GFSK_WORKAROUND_4, 0x70, 0x00 ) ) !=
+        LLCC68_STATUS_OK )
+    {
+        return status;
+    }
+    return status;
+}
+
+llcc68_status_t llcc68_tx_modulation_workaround( const void* context, llcc68_pkt_type_t pkt_type, llcc68_lora_bw_t bw )
 {
     uint8_t reg_value = 0;
 
@@ -1523,13 +1554,18 @@ static llcc68_status_t llcc68_tx_modulation_workaround( const void* context, llc
         }
         else
         {
-            reg_value |= ( 1 << 2 );  // Bit 2 set to 1 for any (G)FSK configuration
+            reg_value |= ( 1 << 2 );  // Bit 2 set to 1 for any configuration other than LoRa BW 500kHz
         }
 
         status = llcc68_write_register( context, LLCC68_REG_TX_MODULATION, &reg_value, 1 );
     }
     return status;
 }
+
+/*
+ * -----------------------------------------------------------------------------
+ * --- PRIVATE FUNCTIONS DEFINITION --------------------------------------------
+ */
 
 static inline uint32_t llcc68_get_gfsk_crc_len_in_bytes( llcc68_gfsk_crc_types_t crc_type )
 {
@@ -1548,6 +1584,26 @@ static inline uint32_t llcc68_get_gfsk_crc_len_in_bytes( llcc68_gfsk_crc_types_t
     }
 
     return 0;
+}
+
+llcc68_status_t llcc68_read_modify_write_register( const void* context, uint16_t address, uint8_t mask, uint8_t value )
+{
+    llcc68_status_t status         = LLCC68_STATUS_ERROR;
+    uint8_t         register_value = 0;
+
+    // Read
+    status = llcc68_read_register( context, address, &register_value, 1 );
+    if( status == LLCC68_STATUS_OK )
+    {
+        // Modify
+        register_value &= ( ~mask );
+        register_value += ( value & mask );
+
+        // Write
+        status = llcc68_write_register( context, address, &register_value, 1 );
+    }
+
+    return status;
 }
 
 /* --- EOF ------------------------------------------------------------------ */

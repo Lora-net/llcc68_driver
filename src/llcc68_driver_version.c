@@ -44,12 +44,6 @@
  * --- PRIVATE MACROS-----------------------------------------------------------
  */
 
-#define STR_HELPER( x ) #x
-#define STR( x ) STR_HELPER( x )
-
-#define LLCC68_DRIVER_VERSION_FULL \
-    "v" STR( LLCC68_DRIVER_VERSION_MAJOR ) "." STR( LLCC68_DRIVER_VERSION_MINOR ) "." STR( LLCC68_DRIVER_VERSION_PATCH )
-
 /*
  * -----------------------------------------------------------------------------
  * --- PRIVATE CONSTANTS -------------------------------------------------------
@@ -77,7 +71,7 @@
 
 const char* llcc68_driver_version_get_version_string( void )
 {
-    return ( const char* ) LLCC68_DRIVER_VERSION_FULL;
+    return ( const char* ) LLCC68_DRIVER_VERSION;
 }
 
 /*

@@ -20,3 +20,27 @@ The HAL (Hardware Abstraction Layer) is a collection of functions the user shall
 - llcc68_hal_wakeup
 - llcc68_hal_write
 - llcc68_hal_read
+
+## Cmake usage
+
+This driver exposes a cmake configuration allowing to integrate the driver in a cmake ready application.
+
+### Integration
+
+If the driver code resides in a directory of the application using it, it can be integrated by adding the subdirectory to the configuration as follows:
+
+```cmake
+add_subdirectory(llcc68_driver) # where llcc68_driver is the name of the folder containing the driver code
+```
+
+Alternatively, if the driver code is available through a code archive, it can be included directly by
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(
+    llcc68_driver
+    URL "path_to_archive" # Where path_to_archive is to be replaced by the path to the archive driver
+)
+FetchContent_MakeAvailable(llcc68_driver)
+```
+
